@@ -1,0 +1,28 @@
+<!doctype html>
+<title>
+    {% block title %}{% endblock %}
+</title>
+
+{% block default_styles %}
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+{% endblock %}
+{% block styles %}{% endblock %}
+
+<nav>
+    {% block navigation %}{% endblock %}
+</nav>
+<section class="content">
+    <header>
+        {% block header %}{% endblock %}
+    </header>
+    {% for message in get_flashed_messages() %}
+        <div class="flash">{{ message }}</div>
+    {% endfor %}
+    {% block content %}{% endblock %}
+
+    {% block default_js %}
+        <script src="{{ url_for('static', filename='upload.js') }}"></script>
+    {% endblock %}
+    {% block scripts %}
+    {% endblock %}
+</section>

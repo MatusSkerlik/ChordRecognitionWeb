@@ -1,0 +1,8 @@
+@import "_normalize.css";
+@import "_defaults.css";
+
+
+html, body, .content {
+    width: 100%;
+    height: 100%;
+}
