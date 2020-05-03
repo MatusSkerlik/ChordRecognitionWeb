@@ -4,25 +4,20 @@
 </title>
 
 {% block default_styles %}
-    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <link rel="stylesheet" type="text/css" href="{{ url_for('static', filename='style.css') }}">
 {% endblock %}
 {% block styles %}{% endblock %}
 
-<nav>
-    {% block navigation %}{% endblock %}
-</nav>
+<header>
+    {% block header %}{% endblock %}
+</header>
 <section class="content">
-    <header>
-        {% block header %}{% endblock %}
-    </header>
     {% for message in get_flashed_messages() %}
         <div class="flash">{{ message }}</div>
     {% endfor %}
     {% block content %}{% endblock %}
-
-    {% block default_js %}
-        <script src="{{ url_for('static', filename='upload.js') }}"></script>
-    {% endblock %}
-    {% block scripts %}
-    {% endblock %}
 </section>
+<footer>
+    {% block footer %}{% endblock %}
+</footer>
+{% block scripts %}{% endblock %}

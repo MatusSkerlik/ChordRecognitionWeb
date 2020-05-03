@@ -1,6 +1,7 @@
 import os
 
-from flask import Flask
+from flask import Flask, redirect, url_for, session
+from flask_session import Session
 
 from chordify_web.logging import setup_logging
 
@@ -12,7 +13,7 @@ def create_app(test_config=None):
 
     if test_config is None:
         # load the instance config, if it exists, when not testing
-        app.config.from_pyfile('config.py', silent=True)
+        app.config.from_pyfile('config.py', silent=False)
     else:
         # load the tests config if passed in
         app.config.from_mapping(test_config)
@@ -26,9 +27,14 @@ def create_app(test_config=None):
     except OSError:
         pass
 
-    from . import base, upload, analysis
-    app.register_blueprint(base.bp)
+    from . import upload, analysis
+
     app.register_blueprint(upload.bp)
     app.register_blueprint(analysis.bp)
 
+    @app.route('/')
+    def run():
+        return redirect(url_for('upload.index'))
+
+    Session(app)
     return app

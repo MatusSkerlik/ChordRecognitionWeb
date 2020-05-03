@@ -1,8 +1,167 @@
-@import "_normalize.css";
-@import "_defaults.css";
-
-
-html, body, .content {
-    width: 100%;
+html, body {
     height: 100%;
 }
+
+@font-face {
+    font-family: 'SourceSansPro-Light';
+    src: url(fonts/SourceSansPro-Light.ttf);
+}
+
+@font-face {
+    font-family: 'SourceSansPro-ExtraLight';
+    src: url(fonts/SourceSansPro-ExtraLight.ttf);
+}
+
+@font-face {
+    font-family: 'SourceSansPro-Regular';
+    src: url(fonts/SourceSansPro-Regular.ttf);
+}
+
+h1 {
+    font-family: 'SourceSansPro-ExtraLight', Helvetica, sans-serif;
+    font-size: 60px;
+    font-style: italic;
+    font-weight: lighter;
+    margin: 16px 0;
+}
+
+
+header {
+    font-family: 'SourceSansPro-ExtraLight', Helvetica, sans-serif;
+    text-align: center;
+
+    margin: 0 auto;
+    width: 80%;
+}
+
+footer {
+    font-family: 'SourceSansPro-ExtraLight', Helvetica, sans-serif;
+    text-align: center;
+
+    margin: 0 auto;
+    width: 80%;
+}
+
+section {
+
+}
+
+.content {
+    font-family: 'SourceSansPro-Regular', Helvetica, sans-serif;
+    text-align: center;
+
+    margin: 0 auto;
+
+    width: 80%;
+    height: 100%;
+}
+
+.content div.upload {
+    height: 100%;
+
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    flex-direction: column;
+}
+
+.content div.click {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+
+    transition-duration: 0.25s;
+    width: 240px;
+    height: 240px;
+    margin: 16px;
+    border: black solid 2px;
+    background: black url("mockup.jpg") no-repeat center;
+    background-size: cover;
+
+    text-align: center;
+}
+
+.content div.click:active {
+    transition-duration: 0s;
+    border: white solid 2px;
+    margin: 8px;
+    padding: 8px;
+}
+
+.content div.click span {
+    font-family: 'SourceSansPro-Light', Helvetica, sans-serif;
+    font-style: italic;
+    color: white;
+    font-size: 96px;
+}
+
+.content div.upload div.info {
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+}
+
+.content div.upload div.info span {
+    margin: 0 8px;
+    padding-bottom: 8px;
+}
+
+.info .key {
+    font-family: 'SourceSansPro-Regular', Helvetica, sans-serif;
+    font-weight: bold;
+    float: left;
+}
+
+.info .value {
+    font-family: 'SourceSansPro-Regular', Helvetica, sans-serif;
+    font-style: italic;
+    float: right;
+}
+
+#loading {
+    position: fixed;
+    width: 100%;
+    left: 0;
+    right: 0;
+    top: 0;
+    bottom: 0;
+    background-color: rgba(255, 255, 255, 0.7);
+    z-index: 9999;
+    display: none;
+}
+
+@-webkit-keyframes spin {
+    from {
+        -webkit-transform: rotate(0deg);
+    }
+    to {
+        -webkit-transform: rotate(360deg);
+    }
+}
+
+@keyframes spin {
+    from {
+        transform: rotate(0deg);
+    }
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+#loading::after {
+    content: '';
+    display: block;
+    position: absolute;
+    left: 48%;
+    top: 40%;
+    width: 40px;
+    height: 40px;
+    border-style: solid;
+    border-color: black;
+    border-top-color: transparent;
+    border-width: 4px;
+    border-radius: 50%;
+    -webkit-animation: spin .8s linear infinite;
+    animation: spin .8s linear infinite;
+}
+

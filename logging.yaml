@@ -12,7 +12,7 @@ formatters:
 handlers:
   console:
     class: logging.StreamHandler
-    level: DEBUG
+    level: INFO
     formatter: standard
     stream: ext://sys.stdout
 
@@ -21,7 +21,7 @@ handlers:
     level: INFO
     formatter: standard
     filename: ext://instance.config.INFO_LOG
-    maxBytes: 10485760 # 10MB
+    maxBytes: ext://instance.config.MAX_LOG_SIZE 
     backupCount: 20
     encoding: utf8
 
@@ -30,7 +30,7 @@ handlers:
     level: ERROR
     formatter: error
     filename: ext://instance.config.ERROR_LOG
-    maxBytes: 10485760 # 10MB
+    maxBytes: ext://instance.config.MAX_LOG_SIZE 
     backupCount: 20
     encoding: utf8
 
@@ -39,7 +39,7 @@ handlers:
     level: DEBUG
     formatter: standard
     filename: ext://instance.config.DEBUG_LOG
-    maxBytes: 10485760 # 10MB
+    maxBytes: ext://instance.config.MAX_LOG_SIZE 
     backupCount: 20
     encoding: utf8
 
@@ -48,7 +48,7 @@ handlers:
     level: CRITICAL
     formatter: standard
     filename: ext://instance.config.CRITICAL_LOG
-    maxBytes: 10485760 # 10MB
+    maxBytes: ext://instance.config.MAX_LOG_SIZE 
     backupCount: 20
     encoding: utf8
 
@@ -57,22 +57,32 @@ handlers:
     level: WARNING
     formatter: standard
     filename: ext://instance.config.WARN_LOG
-    maxBytes: 10485760 # 10MB
+    maxBytes: ext://instance.config.MAX_LOG_SIZE 
     backupCount: 20
     encoding: utf8
 
 root:
   level: NOTSET
-  handlers: [console]
-  propogate: yes
+  handlers: []
+  propogate: no
 
 loggers:
-  chordify:
+  werkzeug:
     level: INFO
     handlers: [console, warn_file_handler, error_file_handler, info_file_handler, critical_file_handler, debug_file_handler]
+    propogate: no
+
+  chordify:
+    level: ERROR
+    handlers: [error_file_handler, critical_file_handler]
     propogate: no
 
   chordify_web:
     level: INFO
     handlers: [console, warn_file_handler, error_file_handler, info_file_handler, critical_file_handler, debug_file_handler]
-    propogate: yes
+    propogate: no
+
+  decoder:
+    level: INFO
+    handlers: [console, error_file_handler, info_file_handler, critical_file_handler]
+    propogate: no

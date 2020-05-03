@@ -1,58 +1,49 @@
-from abc import abstractmethod, ABC
+import logging
+from abc import abstractmethod
 from functools import lru_cache
-from pathlib import Path
-from typing import Any
+from typing import Any, Protocol, runtime_checkable, Union, Sequence
 
 import librosa
-import numpy as np
+import numpy
 
-from chordify.logger import log
-from .exceptions import IllegalArgumentError
 from .hcdf import get_segments
 
+_logger = logging.getLogger(__name__)
 
-class Strategy(ABC):
 
-    @classmethod
+class LoadStrategy:
+    """ Loads music file and returns y """
+
     @abstractmethod
-    def factory(cls, config):
+    def run(self, absolute_path: str) -> numpy.ndarray:
         pass
 
 
-class LoadStrategy(Strategy):
+class ExtractionStrategy:
+    """ Extracts furrier coefficients and returns bins """
 
     @abstractmethod
-    def run(self, absolute_path: Path) -> np.ndarray:
+    def run(self, y: numpy.ndarray) -> numpy.ndarray:
         pass
 
 
-class ExtractionStrategy(Strategy):
+class ChromaStrategy:
+    """ Unify furrier coefficients (bins) into frames (12-d vector)"""
 
     @abstractmethod
-    def run(self, y: np.ndarray) -> np.ndarray:
+    def run(self, bins: numpy.ndarray) -> numpy.ndarray:
         pass
 
 
-class ChromaStrategy(Strategy):
+class SegmentationStrategy:
+    """ Join multiple frames into one by onset detection or HCDF """
 
     @abstractmethod
-    def run(self, bins: np.ndarray) -> np.ndarray:
+    def run(self, y: numpy.ndarray, chroma: numpy.ndarray) -> (numpy.ndarray, Any):
         pass
 
 
-class SegmentationStrategy(Strategy):
-
-    @abstractmethod
-    def run(self, y: np.ndarray, chroma: np.ndarray) -> (np.ndarray, Any):
-        pass
-
-
-class PathLoadStrategy(LoadStrategy):
-
-    @classmethod
-    def factory(cls, config):
-        log(cls, "Init")
-        return PathLoadStrategy(config["SAMPLING_FREQUENCY"])
+class _PathLoadStrategy(LoadStrategy):
 
     def __init__(self, sampling_frequency: int):
         super().__init__()
@@ -60,21 +51,12 @@ class PathLoadStrategy(LoadStrategy):
         self._sr = sampling_frequency
 
     @lru_cache(maxsize=None)
-    def run(self, absolute_path: Path) -> np.ndarray:
+    def run(self, absolute_path: str) -> numpy.ndarray:
         y, sr = librosa.load(absolute_path, self._sr)
         return y
 
 
-class CQTExtractionStrategy(ExtractionStrategy):
-
-    @classmethod
-    def factory(cls, config):
-        log(cls, "Init")
-        return CQTExtractionStrategy(config["SAMPLING_FREQUENCY"],
-                                     config["HOP_LENGTH"],
-                                     config["MIN_FREQ"],
-                                     config["N_BINS"],
-                                     config["BINS_PER_OCTAVE"])
+class _CQTExtractionStrategy(ExtractionStrategy):
 
     def __init__(self, sampling_frequency: int, hop_length: int, min_freq: int, n_bins: int,
                  bins_per_octave: int) -> None:
@@ -86,26 +68,17 @@ class CQTExtractionStrategy(ExtractionStrategy):
         self._hop_length = hop_length
         self._sr = sampling_frequency
 
-    def run(self, y: np.ndarray) -> np.ndarray:
-        return np.abs(librosa.cqt(y,
-                                  sr=self._sr,
-                                  hop_length=self._hop_length,
-                                  fmin=self._min_freq,
-                                  bins_per_octave=self.bins_per_octave,
-                                  n_bins=self._n_bins)
-                      )
+    def run(self, y: numpy.ndarray) -> numpy.ndarray:
+        return numpy.abs(librosa.cqt(y,
+                                     sr=self._sr,
+                                     hop_length=self._hop_length,
+                                     fmin=self._min_freq,
+                                     bins_per_octave=self.bins_per_octave,
+                                     n_bins=self._n_bins)
+                         )
 
 
-class DefaultChromaStrategy(ChromaStrategy):
-
-    @classmethod
-    def factory(cls, config):
-        log(cls, "Init")
-        return DefaultChromaStrategy(
-            config["HOP_LENGTH"],
-            config["MIN_FREQ"],
-            config["BINS_PER_OCTAVE"]
-        )
+class _DefaultChromaStrategy(ChromaStrategy):
 
     def __init__(self, hop_length: int, min_freq: int, bins_per_octave: int) -> None:
         super().__init__()
@@ -113,7 +86,7 @@ class DefaultChromaStrategy(ChromaStrategy):
         self._min_freq = min_freq
         self._bins_per_octave = bins_per_octave
 
-    def run(self, bins: np.ndarray) -> np.ndarray:
+    def run(self, bins: numpy.ndarray) -> numpy.ndarray:
         return librosa.feature.chroma_cqt(
             C=bins,
             hop_length=self._hop_length,
@@ -122,16 +95,7 @@ class DefaultChromaStrategy(ChromaStrategy):
         )
 
 
-class SmoothingChromaStrategy(ChromaStrategy):
-
-    @classmethod
-    def factory(cls, config):
-        log(cls, "Init")
-        return SmoothingChromaStrategy(
-            config["HOP_LENGTH"],
-            config["MIN_FREQ"],
-            config["BINS_PER_OCTAVE"]
-        )
+class _SmoothingChromaStrategy(ChromaStrategy):
 
     def __init__(self, hop_length: int, min_freq: int, bins_per_octave: int) -> None:
         super().__init__()
@@ -139,7 +103,7 @@ class SmoothingChromaStrategy(ChromaStrategy):
         self._min_freq = min_freq
         self._bins_per_octave = bins_per_octave
 
-    def run(self, bins: np.ndarray) -> np.ndarray:
+    def run(self, bins: numpy.ndarray) -> numpy.ndarray:
         chroma = librosa.feature.chroma_cqt(
             C=bins,
             hop_length=self._hop_length,
@@ -147,23 +111,13 @@ class SmoothingChromaStrategy(ChromaStrategy):
             bins_per_octave=self._bins_per_octave,
         )
 
-        return np.minimum(chroma,
-                          librosa.decompose.nn_filter(chroma,
-                                                      aggregate=np.median,
-                                                      metric='cosine'))
+        return numpy.minimum(chroma,
+                             librosa.decompose.nn_filter(chroma,
+                                                         aggregate=numpy.median,
+                                                         metric='cosine'))
 
 
-class HPSSChromaStrategy(ChromaStrategy):
-
-    @classmethod
-    def factory(cls, config):
-        log(cls, "Init")
-        return HPSSChromaStrategy(
-            config["HOP_LENGTH"],
-            config["MIN_FREQ"],
-            config["BINS_PER_OCTAVE"],
-            config["N_OCTAVES"]
-        )
+class _HPSSChromaStrategy(ChromaStrategy):
 
     def __init__(self, hop_length: int, min_freq: int, bins_per_octave: int, n_octaves: int) -> None:
         super().__init__()
@@ -172,7 +126,7 @@ class HPSSChromaStrategy(ChromaStrategy):
         self._bins_per_octave = bins_per_octave
         self._n_octaves = n_octaves
 
-    def run(self, bins: np.ndarray) -> np.ndarray:
+    def run(self, bins: numpy.ndarray) -> numpy.ndarray:
         h, p = librosa.decompose.hpss(bins)
 
         chroma = librosa.feature.chroma_cqt(
@@ -183,22 +137,14 @@ class HPSSChromaStrategy(ChromaStrategy):
             n_octaves=self._n_octaves
         )
 
-        chroma = np.minimum(chroma,
-                            librosa.decompose.nn_filter(chroma,
-                                                        aggregate=np.median,
-                                                        metric='cosine'))
+        chroma = numpy.minimum(chroma,
+                               librosa.decompose.nn_filter(chroma,
+                                                           aggregate=numpy.median,
+                                                           metric='cosine'))
         return chroma
 
 
-class BeatSegmentationStrategy(SegmentationStrategy):
-
-    @classmethod
-    def factory(cls, config):
-        log(cls, "Init")
-        return BeatSegmentationStrategy(
-            config["SAMPLING_FREQUENCY"],
-            config["HOP_LENGTH"]
-        )
+class _DefaultSegmentationStrategy(SegmentationStrategy):
 
     def __init__(self, sampling_frequency: int, hop_length: int) -> None:
         super().__init__()
@@ -206,60 +152,23 @@ class BeatSegmentationStrategy(SegmentationStrategy):
         self._hop_length = hop_length
         self._sr = sampling_frequency
 
-    def run(self, y: np.ndarray, chroma: np.ndarray) -> (np.ndarray, Any):
-        tempo, beat_f = librosa.beat.beat_track(y=y, sr=self._sr, hop_length=self._hop_length, trim=False)
-        beat_f = librosa.util.fix_frames(beat_f, x_max=chroma.shape[1])
-        sync_chroma = librosa.util.sync(chroma, beat_f, aggregate=np.median)
-        beat_t = librosa.frames_to_time(beat_f, sr=self._sr, hop_length=self._hop_length)
-        return sync_chroma, beat_t
-
-
-class DefaultSegmentationStrategy(SegmentationStrategy):
-
-    @classmethod
-    def factory(cls, config, *args, **kwargs):
-        log(cls, "Init")
-        return DefaultSegmentationStrategy(
-            config["SAMPLING_FREQUENCY"],
-            config["HOP_LENGTH"]
-        )
-
-    def __init__(self, sampling_frequency: int, hop_length: int) -> None:
-        super().__init__()
-
-        self._hop_length = hop_length
-        self._sr = sampling_frequency
-
-    def run(self, y: np.ndarray, chroma: np.ndarray) -> (np.ndarray, None):
+    def run(self, y: numpy.ndarray, chroma: numpy.ndarray) -> (numpy.ndarray, Union[Sequence[float], None]):
         return chroma, librosa.frames_to_time(list(range(chroma.shape[1])),
                                               sr=self._sr,
                                               hop_length=self._hop_length)
 
 
-class VectorSegmentationStrategy(SegmentationStrategy):
-
-    @classmethod
-    def factory(cls, config):
-        log(cls, "Init")
-        return VectorSegmentationStrategy()
+class _VectorSegmentationStrategy(SegmentationStrategy):
 
     def __init__(self) -> None:
         super().__init__()
 
-    def run(self, y: np.ndarray, chroma: np.ndarray) -> (np.ndarray, None):
-        frame = librosa.util.sync(chroma, [0], aggregate=np.median).flatten()
+    def run(self, y: numpy.ndarray, chroma: numpy.ndarray) -> (numpy.ndarray, Union[Sequence[float], None]):
+        frame = librosa.util.sync(chroma, [0], aggregate=numpy.median).flatten()
         return frame, [0, 0]
 
 
-class HCDFSegmentationStrategy(SegmentationStrategy):
-
-    @classmethod
-    def factory(cls, config, *args, **kwargs):
-        log(cls, "Init")
-        return HCDFSegmentationStrategy(
-            config["SAMPLING_FREQUENCY"],
-            config["HOP_LENGTH"]
-        )
+class _BeatSegmentationStrategy(SegmentationStrategy):
 
     def __init__(self, sampling_frequency: int, hop_length: int) -> None:
         super().__init__()
@@ -267,48 +176,160 @@ class HCDFSegmentationStrategy(SegmentationStrategy):
         self._hop_length = hop_length
         self._sr = sampling_frequency
 
-    def run(self, y: np.ndarray, chroma: np.ndarray) -> (np.ndarray, None):
+    def run(self, y: numpy.ndarray, chroma: numpy.ndarray) -> (numpy.ndarray, Union[Sequence[float], None]):
+        tempo, beat_f = librosa.beat.beat_track(y=y, sr=self._sr, hop_length=self._hop_length, trim=False)
+        beat_f = librosa.util.fix_frames(beat_f, x_max=chroma.shape[1])
+        sync_chroma = librosa.util.sync(chroma, beat_f, aggregate=numpy.median)
+        beat_t = librosa.frames_to_time(beat_f, sr=self._sr, hop_length=self._hop_length)
+        return sync_chroma, beat_t
+
+
+class _HCDFSegmentationStrategy(SegmentationStrategy):
+
+    def __init__(self, sampling_frequency: int, hop_length: int) -> None:
+        super().__init__()
+
+        self._hop_length = hop_length
+        self._sr = sampling_frequency
+
+    def run(self, y: numpy.ndarray, chroma: numpy.ndarray) -> (numpy.ndarray, Union[Sequence[float], None]):
         _segments, _peaks = get_segments(chroma)
         _med_segments = list()
         for vectors in _segments:
-            vector = librosa.util.sync(vectors, [0], aggregate=np.median)
+            vector = librosa.util.sync(vectors, [0], aggregate=numpy.median)
             _med_segments.append(vector.flatten())
-        return np.array(_med_segments).T, librosa.frames_to_time(_peaks, sr=self._sr, hop_length=self._hop_length)
+        return numpy.array(_med_segments).T, librosa.frames_to_time(_peaks, sr=self._sr, hop_length=self._hop_length)
 
 
-class AudioProcessing(Strategy):
+class _AudioProcessing:
 
-    @classmethod
-    def factory(cls, config):
-        log(cls, "Init")
-        return AudioProcessing(
-            config["AP_LOAD_STRATEGY_CLASS"].factory(config),
-            config["AP_EXTRACTION_STRATEGY_CLASS"].factory(config),
-            config["AP_CHROMA_STRATEGY_CLASS"].factory(config),
-            config["AP_SEGMENTATION_STRATEGY_CLASS"].factory(config)
-        )
-
-    def __init__(self, load_strategy: LoadStrategy, stft_strategy: ExtractionStrategy, chroma_strategy: ChromaStrategy,
-                 beat_strategy: SegmentationStrategy) -> None:
+    def __init__(self, load_strategy: LoadStrategy, extraction_strategy: ExtractionStrategy,
+                 chroma_strategy: ChromaStrategy,
+                 segmentation_strategy: SegmentationStrategy) -> None:
         super().__init__()
 
         if load_strategy is None:
-            raise IllegalArgumentError
-        if stft_strategy is None:
-            raise IllegalArgumentError
+            raise NameError("Load strategy cannot be None !")
+        if extraction_strategy is None:
+            raise NameError("Extraction strategy cannot be None !")
         if chroma_strategy is None:
-            raise IllegalArgumentError
-        if beat_strategy is None:
-            raise IllegalArgumentError
+            raise NameError("Chroma strategy cannot be None !")
+        if segmentation_strategy is None:
+            raise NameError("Segmentation strategy cannot be None !")
 
         self.load_strategy = load_strategy
-        self.extraction_strategy = stft_strategy
+        self.extraction_strategy = extraction_strategy
         self.chroma_strategy = chroma_strategy
-        self.segmentation_strategy = beat_strategy
+        self.segmentation_strategy = segmentation_strategy
 
-    def process(self, absolute_path: Path) -> (np.ndarray, Any):
-        log(self.__class__, "Processing = " + str(absolute_path.resolve()))
+    def process(self, absolute_path: str) -> (numpy.ndarray, Union[Sequence[float], None]):
+        _logger.info(self.__class__, "Processing = " + absolute_path)
         y = self.load_strategy.run(absolute_path)
         bins = self.extraction_strategy.run(y)
         chroma = self.chroma_strategy.run(bins)
         return self.segmentation_strategy.run(y, chroma)
+
+
+@runtime_checkable
+class LoadStrategyFactory(Protocol):
+    def __call__(self, config: dict) -> LoadStrategy: ...
+
+
+@runtime_checkable
+class ChromaStrategyFactory(Protocol):
+    def __call__(self, config: dict) -> ChromaStrategy: ...
+
+
+@runtime_checkable
+class ExtractionStrategyFactory(Protocol):
+    def __call__(self, config: dict) -> ExtractionStrategy: ...
+
+
+@runtime_checkable
+class SegmentationStrategyFactory(Protocol):
+    def __call__(self, config: dict) -> SegmentationStrategy: ...
+
+
+def _AudioProcessingFactory(config: dict):
+    load_strategy_factory = config['LOAD_STRATEGY_FACTORY']
+    extraction_strategy_factory = config['EXTRACTION_STRATEGY_FACTORY']
+    chroma_strategy_factory = config['CHROMA_STRATEGY_FACTORY']
+    segmentation_strategy_factory = config['SEGMENTATION_STRATEGY_FACTORY']
+
+    if not isinstance(load_strategy_factory, LoadStrategyFactory):
+        raise ValueError("Load strategy must obey LoadStrategyFactory Protocol.")
+    if not isinstance(extraction_strategy_factory, ExtractionStrategyFactory):
+        raise ValueError("Load strategy must obey ExtractionStrategyFactory Protocol.")
+    if not isinstance(chroma_strategy_factory, ChromaStrategyFactory):
+        raise ValueError("Load strategy must obey ChromaStrategyFactory Protocol.")
+    if not isinstance(segmentation_strategy_factory, SegmentationStrategyFactory):
+        raise ValueError("Load strategy must obey SegmentationStrategyFactory Protocol.")
+
+    return _AudioProcessing(
+        load_strategy_factory(config),
+        extraction_strategy_factory(config),
+        chroma_strategy_factory(config),
+        segmentation_strategy_factory(config)
+    )
+
+
+def PathLoadStrategyFactory(config: dict) -> LoadStrategy:
+    return _PathLoadStrategy(config["SAMPLING_FREQUENCY"])
+
+
+def CQTExtractionStrategyFactory(config: dict) -> ExtractionStrategy:
+    return _CQTExtractionStrategy(config["SAMPLING_FREQUENCY"],
+                                  config["HOP_LENGTH"],
+                                  config["MIN_FREQ"],
+                                  config["N_BINS"],
+                                  config["BINS_PER_OCTAVE"])
+
+
+def DefaultChromaStrategyFactory(config: dict) -> ChromaStrategy:
+    return _DefaultChromaStrategy(
+        config["HOP_LENGTH"],
+        config["MIN_FREQ"],
+        config["BINS_PER_OCTAVE"]
+    )
+
+
+def SmoothingChromaStrategyFactory(config: dict) -> ChromaStrategy:
+    return _SmoothingChromaStrategy(
+        config["HOP_LENGTH"],
+        config["MIN_FREQ"],
+        config["BINS_PER_OCTAVE"]
+    )
+
+
+def HPSSChromaStrategyFactory(config: dict) -> ChromaStrategy:
+    return _HPSSChromaStrategy(
+        config["HOP_LENGTH"],
+        config["MIN_FREQ"],
+        config["BINS_PER_OCTAVE"],
+        config["N_OCTAVES"]
+    )
+
+
+def DefaultSegmentationStrategyFactory(config: dict) -> SegmentationStrategy:
+    return _DefaultSegmentationStrategy(
+        config["SAMPLING_FREQUENCY"],
+        config["HOP_LENGTH"]
+    )
+
+
+def BeatSegmentationStrategyFactory(config: dict) -> SegmentationStrategy:
+    return _BeatSegmentationStrategy(
+        config["SAMPLING_FREQUENCY"],
+        config["HOP_LENGTH"]
+    )
+
+
+def VectorSegmentationStrategyFactory(config: dict) -> SegmentationStrategy:
+    return _VectorSegmentationStrategy()
+
+
+def HCDFSegmentationStrategy(config: dict) -> SegmentationStrategy:
+    return _HCDFSegmentationStrategy(
+        config["SAMPLING_FREQUENCY"],
+        config["HOP_LENGTH"]
+    )
