@@ -1,6 +1,7 @@
 from functools import partial
 from typing import Protocol, Any, runtime_checkable
 
+import numpy
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.model_selection import GridSearchCV
 from sklearn.neighbors import KNeighborsClassifier
@@ -34,7 +35,15 @@ class EstimatorMixin(BaseEstimator, Protocol):
     def fit(self, X: Any, y: Any, **kwargs) -> Any: ...
 
 
-class _Estimator(BaseEstimator):
+# preserves rules from chord recognition module
+@runtime_checkable
+class PredictStrategy(Protocol):
+    def predict(self, frame: Any, *args) -> Any:
+        ...
+
+
+# preserves rules from chord recognition module
+class _Estimator(PredictStrategy):
 
     def __init__(self, estimator: BaseEstimator, label_transformer: BaseTransformer) -> None:
         super().__init__()
@@ -42,14 +51,42 @@ class _Estimator(BaseEstimator):
         self._label_transformer = label_transformer
         self._estimator = estimator
 
-    def predict(self, X: Any, **kwargs) -> Any:
-        y = self._estimator.predict(X, **kwargs)
-        return self._label_transformer.inverse_transform(y)
+    def predict(self, frame: Any, *args) -> Any:
+        # Reshape your data either using array.reshape(-1, 1) if your data has a single feature or
+        # array.reshape(1, -1) if it contains a single sample.
+
+        y = self._estimator.predict(numpy.asarray(frame).reshape(1, -1))
+        return self._label_transformer.inverse_transform(y)[0]
+
+
+class _ObjectEncoder(LabelEncoder):
+    """ Encode objects instead of numbers or strings """
+    _classes = None
+
+    def fit(self, y):
+        self._classes = dict(map(lambda obj: (str(obj), obj), y))
+        keys = tuple(map(lambda obj: str(obj), y))
+        return super().fit(keys)
+
+    def transform(self, y):
+        keys = tuple(map(lambda obj: str(obj), y))
+        return super().transform(keys)
+
+    def fit_transform(self, y):
+        self.fit(y)
+        return self.transform(y)
+
+    def inverse_transform(self, y):
+        keys = super().inverse_transform(y)
+        values = tuple(map(lambda obj: self._classes[obj], keys))
+
+        return values
 
 
 # Supervised Estimator
-def _BestEstimatorFactory(X: Any, y: Any, estimator: EstimatorMixin = SVC(), **kwargs) -> object:
-    encoder = LabelEncoder()
+def _BestEstimatorFactory(X: Any, y: Any, estimator: EstimatorMixin = SVC(), **kwargs) -> PredictStrategy:
+    """ Be sure that y argument can be encoded and take note that it will be output of estimator """
+    encoder = _ObjectEncoder()
     encoder.fit(y)
     encoded_y = encoder.transform(y)
 

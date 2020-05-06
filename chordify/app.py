@@ -58,22 +58,25 @@ class Transcript(Protocol):
 
 
 @runtime_checkable
-class Learner(Protocol):
-    """ Learns chords from audio samples """
-
-    _predict_strategy: PredictStrategy
-
-    @abstractmethod
-    def from_samples(self, samples: Iterable[Tuple[str, str]]) -> PredictStrategy:
-        """ First argument of tuple is chord string, second is filepath of sample. Return path to saved model. """
-        ...
-
-    def load(self, filename: str) -> PredictStrategy:
-        """ Load predict strategy from MODEL_OUTPUT_DIR + filename  """
-        ...
+class LearnedStrategy(Protocol):
+    """ Proxy for predict strategy with save method """
 
     def save(self, filename: str):
         """ Save last learned strategy to MODEL_OUTPUT_DIR + filename, can be called after :method from_samples()  """
+        ...
+
+
+@runtime_checkable
+class Learner(Protocol):
+    """ Learns chords from audio samples """
+
+    @abstractmethod
+    def from_samples(self, samples: Iterable[Tuple[str, str]]) -> LearnedStrategy:
+        """ First argument of tuple is chord string, second is filepath of sample. Return path to saved model. """
+        ...
+
+    def load(self, filename: str) -> LearnedStrategy:
+        """ Load predict strategy from MODEL_OUTPUT_DIR + filename  """
         ...
 
 
@@ -125,6 +128,11 @@ class _Transcript(Transcript):
 class TranscriptBuilder(_ConfigBuilder):
     """ Use for instantiate Transcript """
 
+    # TODO not properly set, bug in chord_recognition module (PredictStrategyFactory protocol check will pass)
+    def setLearnedStrategy(self, strategy: LearnedStrategy):
+        self._config['PREDICT_STRATEGY_FACTORY'] = lambda config: strategy
+        return self
+
     @staticmethod
     def default() -> Transcript:
         return _Transcript(default_config)
@@ -136,8 +144,36 @@ class TranscriptBuilder(_ConfigBuilder):
         )))
 
 
+class _LearnedStrategy(LearnedStrategy):
+
+    def __init__(self, predict_strategy: PredictStrategy, model_output_dir: str) -> None:
+        super().__init__()
+
+        if not isinstance(predict_strategy, PredictStrategy):
+            raise NameError('Wrong type of predict_strategy.')
+
+        self._predict_strategy = predict_strategy
+        self._model_output_dir = model_output_dir
+
+    def __getattr__(self, attr):
+        """ invoked if the attribute wasn't found the usual ways """
+
+        if '_predict_strategy' not in self.__dict__:
+            raise AttributeError
+        if '_model_output_dir' not in self.__dict__:
+            raise AttributeError
+
+        if hasattr(self._predict_strategy, attr):
+            return getattr(self._predict_strategy, attr)
+
+        raise AttributeError
+
+    def save(self, filename: str):
+        with open(os.path.join(self._model_output_dir, filename), 'wb') as file:
+            Pickler(file, pickle.DEFAULT_PROTOCOL).dump(self)
+
+
 class _Learner(Learner):
-    _predict_strategy: PredictStrategy = None
 
     def __init__(self, config: dict) -> None:
         super().__init__()
@@ -145,7 +181,7 @@ class _Learner(Learner):
         self.audio = _AudioProcessingFactory(config)
         self.model_output = config['MODEL_OUTPUT_DIR']
 
-    def from_samples(self, samples: Iterable[Tuple[str, str]]) -> PredictStrategy:
+    def from_samples(self, samples: Iterable[Tuple[str, str]]) -> LearnedStrategy:
         label_set, vector_time_set = tee(samples)
 
         label_set = tuple(label_filepath[0] for label_filepath in label_set)
@@ -154,24 +190,21 @@ class _Learner(Learner):
         )
         vector_set = tuple(vector_time[0] for vector_time in vector_time_set)
 
-        # TODO change classifier for argument
-        self._predict_strategy = SVMClassifier(vector_set, label_set)
-        return self._predict_strategy
+        # TODO change classifier for argument or builder setter
+        return _LearnedStrategy(SVMClassifier(vector_set, label_set), self.model_output)
 
-    def load(self, filename: str) -> PredictStrategy:
+    def load(self, filename: str) -> LearnedStrategy:
         with open(os.path.join(self.model_output, filename), 'rb') as file:
-            return Unpickler(file, pickle.DEFAULT_PROTOCOL).load()
-
-    def save(self, filename: str):
-        if not isinstance(self._predict_strategy, PredictStrategy):
-            raise NameError('This learner does not learned any predict strategies.')
-
-        with open(os.path.join(self.model_output, filename), 'wb') as file:
-            Pickler(file, pickle.DEFAULT_PROTOCOL).dump(self._predict_strategy)
+            return Unpickler(file).load()
 
 
 class LearnerBuilder(_ConfigBuilder):
     """ Use for instantiate Learner """
+
+    # TODO check if dir exists
+    def setModelOutputDir(self, path: str):
+        self._config['MODEL_OUTPUT_DIR'] = path
+        return self
 
     @staticmethod
     def default() -> Learner:

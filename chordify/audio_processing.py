@@ -238,42 +238,42 @@ def _apply_property(prop: str, value: Any = None):
     return decorate
 
 
-def _load_strategy(obj):
-    return _apply_property('__load_strategy__')(obj)
+def _load_strategy_factory(obj):
+    return _apply_property('__load_strategy_factory__')(obj)
 
 
-def _extraction_strategy(obj):
-    return _apply_property('__extraction_strategy__')(obj)
+def _extraction_strategy_factory(obj):
+    return _apply_property('__extraction_strategy_factory__')(obj)
 
 
-def _chroma_strategy(obj):
-    return _apply_property('__chroma_strategy__')(obj)
+def _chroma_strategy_factory(obj):
+    return _apply_property('__chroma_strategy_factory__')(obj)
 
 
-def _segmentation_strategy(obj):
-    return _apply_property('__segmentation_strategy__')(obj)
+def _segmentation_strategy_factory(obj):
+    return _apply_property('__segmentation_strategy_factory__')(obj)
 
 
 @runtime_checkable
-@_load_strategy
+@_load_strategy_factory
 class LoadStrategyFactory(Protocol):
     def __call__(self, config: dict) -> LoadStrategy: ...
 
 
 @runtime_checkable
-@_chroma_strategy
+@_chroma_strategy_factory
 class ChromaStrategyFactory(Protocol):
     def __call__(self, config: dict) -> ChromaStrategy: ...
 
 
 @runtime_checkable
-@_extraction_strategy
+@_extraction_strategy_factory
 class ExtractionStrategyFactory(Protocol):
     def __call__(self, config: dict) -> ExtractionStrategy: ...
 
 
 @runtime_checkable
-@_segmentation_strategy
+@_segmentation_strategy_factory
 class SegmentationStrategyFactory(Protocol):
     def __call__(self, config: dict) -> SegmentationStrategy: ...
 
@@ -301,12 +301,12 @@ def _AudioProcessingFactory(config: dict):
     )
 
 
-@_load_strategy
+@_load_strategy_factory
 def PathLoadStrategyFactory(config: dict) -> LoadStrategy:
     return _PathLoadStrategy(config["SAMPLING_FREQUENCY"])
 
 
-@_extraction_strategy
+@_extraction_strategy_factory
 def CQTExtractionStrategyFactory(config: dict) -> ExtractionStrategy:
     return _CQTExtractionStrategy(config["SAMPLING_FREQUENCY"],
                                   config["HOP_LENGTH"],
@@ -315,7 +315,7 @@ def CQTExtractionStrategyFactory(config: dict) -> ExtractionStrategy:
                                   config["BINS_PER_OCTAVE"])
 
 
-@_chroma_strategy
+@_chroma_strategy_factory
 def DefaultChromaStrategyFactory(config: dict) -> ChromaStrategy:
     return _DefaultChromaStrategy(
         config["HOP_LENGTH"],
@@ -324,7 +324,7 @@ def DefaultChromaStrategyFactory(config: dict) -> ChromaStrategy:
     )
 
 
-@_chroma_strategy
+@_chroma_strategy_factory
 def SmoothingChromaStrategyFactory(config: dict) -> ChromaStrategy:
     return _SmoothingChromaStrategy(
         config["HOP_LENGTH"],
@@ -333,7 +333,7 @@ def SmoothingChromaStrategyFactory(config: dict) -> ChromaStrategy:
     )
 
 
-@_chroma_strategy
+@_chroma_strategy_factory
 def HPSSChromaStrategyFactory(config: dict) -> ChromaStrategy:
     return _HPSSChromaStrategy(
         config["HOP_LENGTH"],
@@ -343,7 +343,7 @@ def HPSSChromaStrategyFactory(config: dict) -> ChromaStrategy:
     )
 
 
-@_segmentation_strategy
+@_segmentation_strategy_factory
 def DefaultSegmentationStrategyFactory(config: dict) -> SegmentationStrategy:
     return _DefaultSegmentationStrategy(
         config["SAMPLING_FREQUENCY"],
@@ -351,7 +351,7 @@ def DefaultSegmentationStrategyFactory(config: dict) -> SegmentationStrategy:
     )
 
 
-@_segmentation_strategy
+@_segmentation_strategy_factory
 def BeatSegmentationStrategyFactory(config: dict) -> SegmentationStrategy:
     return _BeatSegmentationStrategy(
         config["SAMPLING_FREQUENCY"],
@@ -359,12 +359,12 @@ def BeatSegmentationStrategyFactory(config: dict) -> SegmentationStrategy:
     )
 
 
-@_segmentation_strategy
+@_segmentation_strategy_factory
 def VectorSegmentationStrategyFactory(config: dict) -> SegmentationStrategy:
     return _VectorSegmentationStrategy()
 
 
-@_segmentation_strategy
+@_segmentation_strategy_factory
 def HCDFSegmentationStrategy(config: dict) -> SegmentationStrategy:
     return _HCDFSegmentationStrategy(
         config["SAMPLING_FREQUENCY"],
