@@ -45,11 +45,6 @@ class _FrameSequence(tuple):
 @runtime_checkable
 class PredictStrategy(Protocol):
 
-    @property
-    @abstractmethod
-    def templates(self) -> Sequence[_Vector]:
-        ...
-
     def predict(self, frame: _Vector, threshold: Callable[[float], bool] = lambda t: t) -> _Vector:
         ...
 
@@ -61,6 +56,11 @@ class PredictStrategyFactory(Protocol):
 
 
 class _PredictStrategy(PredictStrategy, ABC):
+
+    @property
+    @abstractmethod
+    def templates(self) -> Sequence[_Vector]:
+        ...
 
     def predict(self, frame: _Vector, threshold: Callable[[float], bool] = lambda t: t) -> _Vector:
         _logger.info(self.__class__, "Predicting...")
@@ -91,6 +91,7 @@ def TemplatePredictStrategyFactory(templates: Sequence[_Vector]) -> PredictStrat
 
     def wrapper(config: dict) -> PredictStrategy:
         return _TemplatePredictStrategy(templates)
+
     return wrapper
 
 

@@ -1,17 +1,23 @@
 import logging
+import os
+import pickle
 import tempfile
 from abc import abstractmethod
 from collections import ChainMap
-from itertools import product
+from itertools import product, tee
+from pickle import Pickler, Unpickler
 from typing import Iterable, Tuple, Mapping, runtime_checkable, Protocol, Sequence
 
+from joblib import delayed, Parallel
 from librosa import note_to_hz
 
-from chordify.audio_processing import _AudioProcessingFactory, PathLoadStrategyFactory, CQTExtractionStrategyFactory, \
+from .audio_processing import _AudioProcessingFactory, PathLoadStrategyFactory, CQTExtractionStrategyFactory, \
     DefaultChromaStrategyFactory, DefaultSegmentationStrategyFactory, LoadStrategyFactory, ExtractionStrategyFactory, \
-    ChromaStrategyFactory, SegmentationStrategyFactory
-from chordify.chord_recognition import _ChordRecognizerFactory, TemplatePredictStrategyFactory, PredictStrategyFactory
-from chordify.notation import Chord
+    ChromaStrategyFactory, SegmentationStrategyFactory, VectorSegmentationStrategyFactory
+from .chord_recognition import _ChordRecognizerFactory, TemplatePredictStrategyFactory, PredictStrategyFactory, \
+    PredictStrategy
+from .learn import SVMClassifier
+from .notation import Chord
 
 _logger = logging.getLogger(__name__)
 
@@ -24,29 +30,21 @@ def _default_templates() -> Sequence[Chord]:
 
 default_config = {
 
-    # "DEBUG": True,
-    # "PLOT_CLASS": Plotter,def _templates():
-    #     _key = ('C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B')
-    #     _type = (':maj', ':min')
-    #     return product(_key, _type)
-    # "CHARTS_HEIGHT": None,
-    # "CHARTS_WIDTH": 6,
-    # "CHARTS_ROWS": None,
-    # "CHARTS_COLS": None,
+    # 'DEBUG': True,
 
-    "LOAD_STRATEGY_FACTORY": PathLoadStrategyFactory,
-    "EXTRACTION_STRATEGY_FACTORY": CQTExtractionStrategyFactory,
-    "CHROMA_STRATEGY_FACTORY": DefaultChromaStrategyFactory,
-    "SEGMENTATION_STRATEGY_FACTORY": DefaultSegmentationStrategyFactory,
-    "PREDICT_STRATEGY_FACTORY": TemplatePredictStrategyFactory(_default_templates()),
+    'LOAD_STRATEGY_FACTORY': PathLoadStrategyFactory,
+    'EXTRACTION_STRATEGY_FACTORY': CQTExtractionStrategyFactory,
+    'CHROMA_STRATEGY_FACTORY': DefaultChromaStrategyFactory,
+    'SEGMENTATION_STRATEGY_FACTORY': DefaultSegmentationStrategyFactory,
+    'PREDICT_STRATEGY_FACTORY': TemplatePredictStrategyFactory(_default_templates()),
 
-    "SAMPLING_FREQUENCY": 44100,
-    "N_BINS": 12 * 2 * 4,
-    "BINS_PER_OCTAVE": 12 * 2,
-    "MIN_FREQ": note_to_hz("C2"),
-    "HOP_LENGTH": 4096,
+    'SAMPLING_FREQUENCY': 44100,
+    'N_BINS': 12 * 2 * 4,
+    'BINS_PER_OCTAVE': 12 * 2,
+    'MIN_FREQ': note_to_hz('C2'),
+    'HOP_LENGTH': 4096,
 
-    "MODEL_OUTPUT_DIR": tempfile.gettempdir()
+    'MODEL_OUTPUT_DIR': tempfile.gettempdir()
 }
 
 
@@ -63,21 +61,60 @@ class Transcript(Protocol):
 class Learner(Protocol):
     """ Learns chords from audio samples """
 
+    _predict_strategy: PredictStrategy
+
     @abstractmethod
-    def from_samples(self, samples: Iterable[Tuple[str, str]]) -> str:
+    def from_samples(self, samples: Iterable[Tuple[str, str]]) -> PredictStrategy:
         """ First argument of tuple is chord string, second is filepath of sample. Return path to saved model. """
         ...
 
+    def load(self, filename: str) -> PredictStrategy:
+        """ Load predict strategy from MODEL_OUTPUT_DIR + filename  """
+        ...
 
-class _Transcript(Transcript):
+    def save(self, filename: str):
+        """ Save last learned strategy to MODEL_OUTPUT_DIR + filename, can be called after :method from_samples()  """
+        ...
+
+
+class _ConfigBuilder:
 
     def __init__(self, config: Mapping = None) -> None:
         super().__init__()
         if config is None:
             config = {}
-        self.config = dict(ChainMap(config, default_config))
-        self.audio = _AudioProcessingFactory(self.config)
-        self.recognize = _ChordRecognizerFactory(self.config)
+        self._config = dict(ChainMap(config, default_config))
+
+    def setLoadStrategyFactory(self, factory: LoadStrategyFactory):
+        self._config['LOAD_STRATEGY_FACTORY'] = factory
+        return self
+
+    def setExtractionStrategyFactory(self, factory: ExtractionStrategyFactory):
+        self._config['EXTRACTION_STRATEGY_FACTORY'] = factory
+        return self
+
+    def setChromaStrategyFactory(self, factory: ChromaStrategyFactory):
+        self._config['CHROMA _STRATEGY_FACTORY'] = factory
+        return self
+
+    def setSegmentationStrategyFactory(self, factory: SegmentationStrategyFactory):
+        self._config['SEGMENTATION_STRATEGY_FACTORY'] = factory
+        return self
+
+    def setPredictStrategyFactory(self, factory: PredictStrategyFactory):
+        self._config['PREDICT_STRATEGY_FACTORY'] = factory
+        return self
+
+    def build(self) -> dict:
+        return self._config
+
+
+class _Transcript(Transcript):
+
+    def __init__(self, config: dict) -> None:
+        super().__init__()
+        self.audio = _AudioProcessingFactory(config)
+        self.recognize = _ChordRecognizerFactory(config)
 
     def from_audio(self, audio_filepath: str):
         frame, time = self.audio.process(audio_filepath)
@@ -85,123 +122,67 @@ class _Transcript(Transcript):
         return chord_sequence
 
 
-class Builder:
-
-    def __init__(self, config) -> None:
-        super().__init__()
-        if config is None:
-            config = {}
-        self.config = config
-
-    def setLoadStrategyFactory(self, factory: LoadStrategyFactory):
-        self.config['LOAD_STRATEGY_FACTORY'] = factory
-
-    def setExtractionStrategyFactory(self, factory: ExtractionStrategyFactory):
-        self.config['EXTRACTION_STRATEGY_FACTORY'] = factory
-
-    def setChromaStrategyFactory(self, factory: ChromaStrategyFactory):
-        self.config['CHROMA _STRATEGY_FACTORY'] = factory
-
-    def setSegmentationStrategyFactory(self, factory: SegmentationStrategyFactory):
-        self.config['SEGMENTATION_STRATEGY_FACTORY'] = factory
-
-    def setPredictStrategyFactory(self, factory: PredictStrategyFactory):
-        self.config['PREDICT_STRATEGY_FACTORY'] = factory
+class TranscriptBuilder(_ConfigBuilder):
+    """ Use for instantiate Transcript """
 
     @staticmethod
     def default() -> Transcript:
-        return _Transcript()
+        return _Transcript(default_config)
 
     def build(self) -> Transcript:
-        return _Transcript(self.config)
+        return _Transcript(dict(ChainMap(
+            super().build(),
+            default_config
+        )))
 
-# class Learn(object):
-#     default_config = {
-#         "CHORD_LEARNING_CLASS": SVCScikitLearnStrategy,
-#     }
-#
-#     @log_exception()
-#     def __init__(self, config: Union[dict, None] = None) -> None:
-#         super().__init__()
-#
-#         self.config = ChainMap(config or {}, Learn.default_config, default_config)
-#         self.debug = self.config["DEBUG"]
-#
-#         self.chord_learner = self.config["CHORD_LEARNING_CLASS"].factory(self.config)
-#         self.config["CHORD_RESOLUTION"] = self.chord_learner.resolution
-#
-#         self.audio_processing = self.config["AUDIO_PROCESSING_CLASS"].factory(self.config)
-#         self.plotter = self.config["PLOT_CLASS"].factory(self.config)
-#
-#     @log_exception()
-#     def from_samples(self, paths: Iterator[Path] = None, labels: Iterator[Vector] = None,
-#                      iterable: Iterator = None):
-#         log(self.__class__, "Start learning")
-#         try:
-#             if iterable is None and (paths is None or labels is None):
-#                 raise IllegalArgumentError
-#
-#             _iter = tuple(zip(paths, labels) if iterable is None else iterable)
-#             _supervised_vectors = SupervisedVectors()
-#
-#             with Parallel(n_jobs=-3) as parallel:
-#                 out = parallel(delayed(self.audio_processing.process)(path) for path, label in _iter)
-#                 for vector_beat, path_label in zip(out, _iter):
-#                     _supervised_vectors.append(_Vector(vector_beat[0]), path_label[1])
-#
-#             self.chord_learner.learn(_supervised_vectors)
-#         finally:
-#             log(self.__class__, "Stop learning")
-#
-#
-# class Transcript(object):
-#     default_config = {
-#         "CHORD_RECOGNITION_CLASS": _TemplatePredictStrategy,
-#     }
-#
-#     @log_exception()
-#     def __init__(self, config: Union[dict, None] = None) -> None:
-#         super().__init__()
-#
-#         self.config = ChainMap(config or {}, Transcript.default_config, default_config)
-#         self.debug: bool = self.config["DEBUG"]
-#
-#         self.chord_recognition: _PredictStrategy = self.config["CHORD_RECOGNITION_CLASS"].factory(self.config)
-#         self.config["CHORD_RESOLUTION"] = self.chord_recognition.resolution
-#
-#         self.audio_processing: _AudioProcessing = self.config["AUDIO_PROCESSING_CLASS"].factory(self.config)
-#         self.plotter: Plotter = self.config["PLOT_CLASS"].factory(self.config)
-#
-#     @log_exception()
-#     def from_audio(self, absolute_path: str, annotation_path: Union[str, None] = None):
-#         log(self.__class__, "Start predicting")
-#         _annotation_parser = None
-#         _prediction_parser = None
-#         _annotation_path = None
-#         try:
-#
-#             _absolute_path = Path(absolute_path)
-#             log(self.__class__, "File = " + str(_absolute_path.resolve()))
-#             if annotation_path is not None:
-#                 _annotation_path = Path(annotation_path)
-#                 log(self.__class__, "Annotation = " + str(_annotation_path.resolve()))
-#                 _annotation_parser = get_parser(self.config, _annotation_path)
-#
-#             chroma_sync, time_segments = self.audio_processing.process(_absolute_path)
-#             labels = self.chord_recognition.predict(chroma_sync, )
-#
-#             if self.debug:
-#                 self.plotter.chromagram(chroma_sync, time_segments)
-#                 prediction_timeline = timeline_from(time_segments, labels)
-#                 if annotation_path is not None:
-#                     annotation_timeline = _annotation_parser.parse(_annotation_path)
-#                     self.plotter.prediction(prediction_timeline, annotation_timeline)
-#                 else:
-#                     self.plotter.prediction(prediction_timeline, None)
-#
-#             self.plotter.show()
-#
-#             log(self.__class__, "Result: " + str(labels))
-#             return labels
-#         finally:
-#             log(self.__class__, "Stop predicting")
+
+class _Learner(Learner):
+    _predict_strategy: PredictStrategy = None
+
+    def __init__(self, config: dict) -> None:
+        super().__init__()
+
+        self.audio = _AudioProcessingFactory(config)
+        self.model_output = config['MODEL_OUTPUT_DIR']
+
+    def from_samples(self, samples: Iterable[Tuple[str, str]]) -> PredictStrategy:
+        label_set, vector_time_set = tee(samples)
+
+        label_set = tuple(label_filepath[0] for label_filepath in label_set)
+        vector_time_set = Parallel(n_jobs=2)(
+            delayed(self.audio.process)(label_filepath[1]) for label_filepath in vector_time_set
+        )
+        vector_set = tuple(vector_time[0] for vector_time in vector_time_set)
+
+        # TODO change classifier for argument
+        self._predict_strategy = SVMClassifier(vector_set, label_set)
+        return self._predict_strategy
+
+    def load(self, filename: str) -> PredictStrategy:
+        with open(os.path.join(self.model_output, filename), 'rb') as file:
+            return Unpickler(file, pickle.DEFAULT_PROTOCOL).load()
+
+    def save(self, filename: str):
+        if not isinstance(self._predict_strategy, PredictStrategy):
+            raise NameError('This learner does not learned any predict strategies.')
+
+        with open(os.path.join(self.model_output, filename), 'wb') as file:
+            Pickler(file, pickle.DEFAULT_PROTOCOL).dump(self._predict_strategy)
+
+
+class LearnerBuilder(_ConfigBuilder):
+    """ Use for instantiate Learner """
+
+    @staticmethod
+    def default() -> Learner:
+        return _Learner(dict(ChainMap(
+            {'SEGMENTATION_STRATEGY_FACTORY': VectorSegmentationStrategyFactory},
+            default_config
+        )))
+
+    def build(self) -> Learner:
+        return _Learner(dict(ChainMap(
+            {'SEGMENTATION_STRATEGY_FACTORY': VectorSegmentationStrategyFactory},
+            super().build(),
+            default_config
+        )))
