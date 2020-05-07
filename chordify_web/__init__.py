@@ -1,7 +1,8 @@
 import os
 
-from flask import Flask, redirect, url_for, session
+from flask import Flask, redirect, url_for, render_template
 from flask_session import Session
+from werkzeug.exceptions import NotFound, InternalServerError, Unauthorized
 
 from chordify_web.logging import setup_logging
 
@@ -27,14 +28,27 @@ def create_app(test_config=None):
     except OSError:
         pass
 
-    from . import upload, analysis
+    from . import upload, analysis, download
 
     app.register_blueprint(upload.bp)
     app.register_blueprint(analysis.bp)
+    app.register_blueprint(download.bp)
 
     @app.route('/')
     def run():
         return redirect(url_for('upload.index'))
+
+    @app.errorhandler(Unauthorized)
+    def handle_401(e):
+        return render_template("error401.html"), 401
+
+    @app.errorhandler(NotFound)
+    def handle_404(e):
+        return render_template("error404.html"), 404
+
+    @app.errorhandler(InternalServerError)
+    def handle_500(e):
+        return render_template("error500.html"), 500
 
     Session(app)
     return app

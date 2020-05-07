@@ -2,13 +2,15 @@ import logging
 import os
 import wave
 from contextlib import contextmanager
+from shutil import copyfileobj
+from typing import Tuple
 
 from .random import random_str
 
 
 @contextmanager
-def _wav_open(stream, mode="rb"):
-    # Code to acquire resource, e.g.:
+def _wav_open(stream, mode="rb") -> wave.Wave_read:
+    """ Opens file for header read (which will seek forward) and resets stream seek """
     try:
         with wave.open(stream, mode) as wav:
             yield wav
@@ -16,24 +18,23 @@ def _wav_open(stream, mode="rb"):
         stream.seek(0)
 
 
-def _save_file(stream, dst: str, buffer_size=16384) -> str:
-    from shutil import copyfileobj
-
-    _path = dst.split(os.sep)[:-1]
-    for i, _dir in enumerate(_path):
-        _sub_path = os.path.join(*_path[:i+1])
-        if not os.path.exists(_sub_path):
-            os.mkdir(_sub_path)
-
-    _dst = open(dst, "wb")
+def _save_file(stream, directory: str, filename: str, buffer_size=16384) -> str:
+    """ Tries to save a file from stream and return filepath """
     try:
-        copyfileobj(stream, _dst, buffer_size)
-        return dst
-    finally:
-        _dst.close()
+        # can throw error if directory exists, this is not expected
+        os.makedirs(directory)
+    except OSError:
+        raise NameError('Directory already exists.')
+
+    filepath = os.path.join(directory, filename)
+
+    with open(filepath, "wb") as output:
+        copyfileobj(stream, output, buffer_size)
+        return filepath
 
 
 def is_wav_file(stream):
+    """ Checks file headers """
     try:
         with _wav_open(stream):
             return True
@@ -43,6 +44,7 @@ def is_wav_file(stream):
 
 
 def check_sampling(stream, min_sr=22050):
+    """ Checks file headers for sampling frequency """
     try:
         with _wav_open(stream) as wav:
             return wav.getframerate() >= min_sr
@@ -51,6 +53,7 @@ def check_sampling(stream, min_sr=22050):
         return False
 
 
-def save_music_file(stream, root_dir: str) -> str:
-    _path = os.path.join(root_dir, random_str(), random_str())
-    return _save_file(stream, _path)
+def save_music_file(stream, upload_dir: str, filename: str) -> Tuple[str, str]:
+    """ Save music file into directory and returns new directory - filepath tuple """
+    directory = random_str()
+    return directory, _save_file(stream, os.path.join(upload_dir, directory), filename)

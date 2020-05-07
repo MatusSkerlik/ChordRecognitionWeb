@@ -1,0 +1,14 @@
+{% extends 'base.html' %}
+
+{% block title %}Chordify - Upload error{% endblock %}
+{% block content %}
+    <div class="upload">
+        <h1>Upload Error</h1>
+        <h2><a href="{{ url_for('upload.index') }}">Try again ?</a></h2>
+    </div>
+{% endblock %}
+
+{% block footer %} <h3>Oooops ... </h3>{% endblock %}
+
+
+

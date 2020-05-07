@@ -1,0 +1,11 @@
+{% extends 'base.html' %}
+
+{% block title %}Chordify - Not Found{% endblock %}
+{% block content %}
+    <div class="upload">
+        <h1>Session expired</h1>
+        <h2><a href="{{ url_for('upload.index') }}">Try again</a></h2>
+    </div>
+{% endblock %}
+
+{% block footer %} <h3>Uhhh oh ... </h3>{% endblock %}

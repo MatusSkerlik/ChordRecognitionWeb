@@ -1,0 +1,11 @@
+{% extends 'base.html' %}
+
+{% block title %}Chordify - Analysis{% endblock %}
+{% block content %}
+    <div class="analysis">
+        {{ g.transcription | safe }}
+    </div>
+    <a href="{{ g.transcription_url }}">Download</a>
+{% endblock %}
+
+

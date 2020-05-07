@@ -1,7 +1,14 @@
-from chordify import Transcript
+""" This module provides factories for chordify package """
+from flask import current_app as app
 
-""" This module provides factories for Transcript and Learner object from chordify package """
+from chordify.app import TranscriptBuilder, Transcript
 
 
-def get_default_transcript(config=None):
-    return Transcript(config)
+def get_default_transcript() -> Transcript:
+    """ Returns Transcript object in default state. """
+    return TranscriptBuilder.default()
+
+
+def get_configured_transcript() -> Transcript:
+    """ Returns Transcript object configured via app config. """
+    return TranscriptBuilder(app.config).build()

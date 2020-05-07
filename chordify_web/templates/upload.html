@@ -4,41 +4,16 @@
 {% block content %}
     <div id="loading"></div>
     <div class="upload">
-        <h1>Transcript file</h1>
+        <h1>Transcript <a id="click">file</a></h1>
         <form id="form" action="{{ url_for('upload.index') }}" method="POST" hidden>
             <input id="file" name="file" type="file" accept=".wav">
         </form>
-        <div class="click" id="click">
-            <span>Click me !</span>
-        </div>
-        <div class="info">
-            <div>
-                <span class="key">Filename: </span>
-                <span class="value">Filename.wav</span>
-            </div>
-            <div>
-                <span class="key">Something else: </span>
-                <span class="value">Filename.wav</span>
-            </div>
-            <div>
-                <span class="key">SomethingSomething: </span>
-                <span class="value">Filename.wav</span>
-            </div>
-            <div>
-                <span class="key">AnotherOne: </span>
-                <span class="value">Filename.wav</span>
-            </div>
-            <div>
-                <span class="key">NextOne: </span>
-                <span class="value">Filename.wav</span>
-            </div>
-        </div>
     </div>
 {% endblock %}
 
-{% block footer %} <h3>Oooops ... </h3>{% endblock %}
+{% block footer %} <h3>Bang ... </h3>{% endblock %}
 {% block scripts %}
-<script src="{{ url_for('static', filename='upload.js')}}"></script>
+    <script src="{{ url_for('static', filename='upload.js') }}"></script>
 {% endblock %}
 
 

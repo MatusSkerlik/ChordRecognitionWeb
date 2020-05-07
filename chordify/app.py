@@ -120,8 +120,13 @@ class _Transcript(Transcript):
         self.recognize = _ChordRecognizerFactory(config)
 
     def from_audio(self, audio_filepath: str):
+        _logger.info('Starting to analyze audio file: %s' % audio_filepath)
+
         frame, time = self.audio.process(audio_filepath)
         chord_sequence = self.recognize.apply(tuple(zip(time, frame.T)))
+
+        _logger.info('Analysis successfully done.')
+
         return chord_sequence
 
 
@@ -182,6 +187,8 @@ class _Learner(Learner):
         self.model_output = config['MODEL_OUTPUT_DIR']
 
     def from_samples(self, samples: Iterable[Tuple[str, str]]) -> LearnedStrategy:
+        _logger.info('Learning of chords has begun.')
+
         label_set, vector_time_set = tee(samples)
 
         label_set = tuple(label_filepath[0] for label_filepath in label_set)
@@ -191,7 +198,10 @@ class _Learner(Learner):
         vector_set = tuple(vector_time[0] for vector_time in vector_time_set)
 
         # TODO change classifier for argument or builder setter
-        return _LearnedStrategy(SVMClassifier(vector_set, label_set), self.model_output)
+        strategy = _LearnedStrategy(SVMClassifier(vector_set, label_set), self.model_output)
+
+        _logger.info('Learning of chords was successful.')
+        return strategy
 
     def load(self, filename: str) -> LearnedStrategy:
         with open(os.path.join(self.model_output, filename), 'rb') as file:

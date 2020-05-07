@@ -365,7 +365,7 @@ def VectorSegmentationStrategyFactory(config: dict) -> SegmentationStrategy:
 
 
 @_segmentation_strategy_factory
-def HCDFSegmentationStrategy(config: dict) -> SegmentationStrategy:
+def HCDFSegmentationStrategyFactory(config: dict) -> SegmentationStrategy:
     return _HCDFSegmentationStrategy(
         config["SAMPLING_FREQUENCY"],
         config["HOP_LENGTH"]
