@@ -10,7 +10,7 @@ logger = logging.getLogger(__name__)
 bp = Blueprint('upload', __name__, url_prefix='/upload')
 
 
-def generate_token(secret):
+def _generate_token(secret):
     """ Generate token and saves it in globals """
     _token = random_str()
     session[_token] = secret
@@ -35,7 +35,7 @@ def index():
                             app.config["UPLOAD_DIR"],
                             app.config["AUDIO_FILE_NAME"]
                         )
-                        return redirect(url_for('analysis.index', filename_token=generate_token(secret)))
+                        return redirect(url_for('analysis.index', filename_token=_generate_token(secret)))
                     else:
                         flash("File has wrong bitrate ( bitrate > 22050).")
                 else:

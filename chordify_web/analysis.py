@@ -10,13 +10,13 @@ from .chordify import get_configured_transcript
 bp = Blueprint('analysis', __name__, url_prefix='/analysis')
 
 
-def resolve_token(token: str):
+def _resolve_token(token: str):
     """ Resolve directory where audio file is saved """
     secret = session.get(token, None)
     return secret
 
 
-def format_transcription(iterable: Sequence[Tuple[float, object]]):
+def _format_transcription(iterable: Sequence[Tuple[float, object]]):
     """ Format transcription as html for render in template """
     result = '<span><b>start stop chord</b></span>'
     start = 0.0
@@ -26,7 +26,7 @@ def format_transcription(iterable: Sequence[Tuple[float, object]]):
     return result
 
 
-def save_transcription(directory: str, filename: str, iterable: Sequence[Tuple[float, object]]) -> str:
+def _save_transcription(directory: str, filename: str, iterable: Sequence[Tuple[float, object]]) -> str:
     """ Save transcription iterator to a file and returns a relative path """
     result = ''
     start = 0.0
@@ -43,15 +43,15 @@ def save_transcription(directory: str, filename: str, iterable: Sequence[Tuple[f
 
 @bp.route('/<filename_token>', methods=['GET'])
 def index(filename_token):
-    token_dir = resolve_token(filename_token)
+    token_dir = _resolve_token(filename_token)
     if token_dir:
         directory = os.path.join(app.config['UPLOAD_DIR'], token_dir)
         if os.path.exists(directory) and os.path.isdir(directory):
             filepath = os.path.join(directory, app.config['AUDIO_FILE_NAME'])
             transcript = get_configured_transcript()
             iterable = transcript.from_audio(filepath)
-            save_transcription(directory, app.config['TRANSCRIPTION_FILE_NAME'], iterable)
+            _save_transcription(directory, app.config['TRANSCRIPTION_FILE_NAME'], iterable)
             g.transcription_url = url_for('download.index', filename_token=filename_token)
-            g.transcription = format_transcription(iterable)
+            g.transcription = _format_transcription(iterable)
             return render_template("analysis.html")
     raise NotFound
