@@ -22,7 +22,13 @@ from .notation import Chord
 _logger = logging.getLogger(__name__)
 
 
-def _default_templates() -> Sequence[Chord]:
+def _binary_templates() -> Sequence[Chord]:
+    _key = ('C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B')
+    _type = (':maj', ':min')
+    return tuple(Chord(''.join(s)) for s in product(_key, _type))
+
+
+def _harmonic_templates() -> Sequence[Chord]:
     _key = ('C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B')
     _type = (':maj', ':min')
     return tuple(Chord(''.join(s)) for s in product(_key, _type))
@@ -36,13 +42,14 @@ default_config = {
     'EXTRACTION_STRATEGY_FACTORY': CQTExtractionStrategyFactory,
     'CHROMA_STRATEGY_FACTORY': DefaultChromaStrategyFactory,
     'SEGMENTATION_STRATEGY_FACTORY': DefaultSegmentationStrategyFactory,
-    'PREDICT_STRATEGY_FACTORY': TemplatePredictStrategyFactory(_default_templates()),
+    'PREDICT_STRATEGY_FACTORY': TemplatePredictStrategyFactory(_binary_templates()),
 
-    'SAMPLING_FREQUENCY': 44100,
-    'N_BINS': 12 * 2 * 4,
-    'BINS_PER_OCTAVE': 12 * 2,
-    'MIN_FREQ': note_to_hz('C2'),
-    'HOP_LENGTH': 4096,
+    'SAMPLING_FREQUENCY': 22100,
+    'N_BINS': 36 * 7,
+    'N_OCTAVES': 7,
+    'BINS_PER_OCTAVE': 36,
+    'MIN_FREQ': note_to_hz('C1'),
+    'HOP_LENGTH': 512,
 
     'MODEL_OUTPUT_DIR': tempfile.gettempdir()
 }
@@ -97,7 +104,7 @@ class _ConfigBuilder:
         return self
 
     def setChromaStrategyFactory(self, factory: ChromaStrategyFactory):
-        self._config['CHROMA _STRATEGY_FACTORY'] = factory
+        self._config['CHROMA_STRATEGY_FACTORY'] = factory
         return self
 
     def setSegmentationStrategyFactory(self, factory: SegmentationStrategyFactory):

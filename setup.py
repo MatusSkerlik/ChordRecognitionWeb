@@ -6,7 +6,7 @@ setup(
     include_package_data=True,
     zip_safe=False,
     install_requires=[
-        'flask', 'werkzeug', 'sklearn', 'numpy', 'librosa', 'scipy', 'matplotlib', 'pandas', 'PyYAML', 'joblib',
+        'flask', 'werkzeug', 'sklearn', 'numpy', 'librosa', 'scipy', 'pandas', 'PyYAML', 'joblib',
         'lark-parser'
     ],
 )

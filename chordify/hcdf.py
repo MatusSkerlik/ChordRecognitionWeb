@@ -25,7 +25,8 @@ def hcdf(frames: np.ndarray):
     return np.array(l2_seq)
 
 
-def get_segments(frames: np.ndarray, prominence=0.5):
+def get_segments(frames: np.ndarray, prominence=None):
     _hcdf = hcdf(frames)
-    _peaks, _ = find_peaks(_hcdf, prominence=prominence)
-    return np.array_split(frames, _peaks, axis=1), np.append(_peaks, np.size(frames, axis=1))
+    _peaks, _ = find_peaks(_hcdf, prominence)
+    return np.array_split(frames, _peaks, axis=1), \
+           np.asarray(tuple(_peaks) + (np.size(frames, axis=1) - 1,))

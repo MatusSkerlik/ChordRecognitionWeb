@@ -61,30 +61,30 @@ class _CQTExtractionStrategy(ExtractionStrategy):
     def __init__(self, sampling_frequency: int, hop_length: int, min_freq: int, n_bins: int,
                  bins_per_octave: int) -> None:
         super().__init__()
-
-        self.bins_per_octave = bins_per_octave
+        self._sr = sampling_frequency
+        self._hop_length = hop_length
+        self._bins_per_octave = bins_per_octave
         self._n_bins = n_bins
         self._min_freq = min_freq
-        self._hop_length = hop_length
-        self._sr = sampling_frequency
 
     def run(self, y: numpy.ndarray) -> numpy.ndarray:
         return numpy.abs(librosa.cqt(y,
                                      sr=self._sr,
                                      hop_length=self._hop_length,
-                                     fmin=self._min_freq,
-                                     bins_per_octave=self.bins_per_octave,
-                                     n_bins=self._n_bins)
+                                     bins_per_octave=self._bins_per_octave,
+                                     n_bins=self._n_bins,
+                                     fmin=self._min_freq)
                          )
 
 
 class _DefaultChromaStrategy(ChromaStrategy):
 
-    def __init__(self, hop_length: int, min_freq: int, bins_per_octave: int) -> None:
+    def __init__(self, hop_length: int, min_freq: int, bins_per_octave: int, n_octaves: int) -> None:
         super().__init__()
         self._hop_length = hop_length
         self._min_freq = min_freq
         self._bins_per_octave = bins_per_octave
+        self._n_octaves = n_octaves
 
     def run(self, bins: numpy.ndarray) -> numpy.ndarray:
         return librosa.feature.chroma_cqt(
@@ -92,24 +92,14 @@ class _DefaultChromaStrategy(ChromaStrategy):
             hop_length=self._hop_length,
             fmin=self._min_freq,
             bins_per_octave=self._bins_per_octave,
+            n_octaves=self._n_octaves
         )
 
 
-class _SmoothingChromaStrategy(ChromaStrategy):
-
-    def __init__(self, hop_length: int, min_freq: int, bins_per_octave: int) -> None:
-        super().__init__()
-        self._hop_length = hop_length
-        self._min_freq = min_freq
-        self._bins_per_octave = bins_per_octave
+class _SmoothingChromaStrategy(_DefaultChromaStrategy):
 
     def run(self, bins: numpy.ndarray) -> numpy.ndarray:
-        chroma = librosa.feature.chroma_cqt(
-            C=bins,
-            hop_length=self._hop_length,
-            fmin=self._min_freq,
-            bins_per_octave=self._bins_per_octave,
-        )
+        chroma = super().run(bins)
 
         return numpy.minimum(chroma,
                              librosa.decompose.nn_filter(chroma,
@@ -122,9 +112,9 @@ class _HPSSChromaStrategy(ChromaStrategy):
     def __init__(self, hop_length: int, min_freq: int, bins_per_octave: int, n_octaves: int) -> None:
         super().__init__()
         self._hop_length = hop_length
-        self._min_freq = min_freq
         self._bins_per_octave = bins_per_octave
         self._n_octaves = n_octaves
+        self._min_freq = min_freq
 
     def run(self, bins: numpy.ndarray) -> numpy.ndarray:
         h, p = librosa.decompose.hpss(bins)
@@ -132,9 +122,9 @@ class _HPSSChromaStrategy(ChromaStrategy):
         chroma = librosa.feature.chroma_cqt(
             C=h,
             hop_length=self._hop_length,
-            fmin=self._min_freq,
             bins_per_octave=self._bins_per_octave,
-            n_octaves=self._n_octaves
+            n_octaves=self._n_octaves,
+            fmin=self._min_freq,
         )
 
         chroma = numpy.minimum(chroma,
@@ -149,8 +139,8 @@ class _DefaultSegmentationStrategy(SegmentationStrategy):
     def __init__(self, sampling_frequency: int, hop_length: int) -> None:
         super().__init__()
 
-        self._hop_length = hop_length
         self._sr = sampling_frequency
+        self._hop_length = hop_length
 
     def run(self, y: numpy.ndarray, chroma: numpy.ndarray) -> (numpy.ndarray, Union[Sequence[float], None]):
         return chroma, librosa.frames_to_time(list(range(chroma.shape[1])),
@@ -164,8 +154,8 @@ class _VectorSegmentationStrategy(SegmentationStrategy):
         super().__init__()
 
     def run(self, y: numpy.ndarray, chroma: numpy.ndarray) -> (numpy.ndarray, Union[Sequence[float], None]):
-        frame = librosa.util.sync(chroma, [0], aggregate=numpy.median).flatten()
-        return frame, [0, 0]
+        frame = numpy.median(chroma, axis=1)
+        return frame, None
 
 
 class _BeatSegmentationStrategy(SegmentationStrategy):
@@ -177,11 +167,12 @@ class _BeatSegmentationStrategy(SegmentationStrategy):
         self._sr = sampling_frequency
 
     def run(self, y: numpy.ndarray, chroma: numpy.ndarray) -> (numpy.ndarray, Union[Sequence[float], None]):
-        tempo, beat_f = librosa.beat.beat_track(y=y, sr=self._sr, hop_length=self._hop_length, trim=False)
-        beat_f = librosa.util.fix_frames(beat_f, x_max=chroma.shape[1])
+        tempo, beat_f = librosa.beat.beat_track(y=y, sr=self._sr, hop_length=self._hop_length)
+        beat_f = librosa.util.fix_frames(beat_f, x_max=chroma.shape[1] - 1)
         sync_chroma = librosa.util.sync(chroma, beat_f, aggregate=numpy.median)
         beat_t = librosa.frames_to_time(beat_f, sr=self._sr, hop_length=self._hop_length)
-        return sync_chroma, beat_t
+
+        return sync_chroma, beat_t[1:]
 
 
 class _HCDFSegmentationStrategy(SegmentationStrategy):
@@ -196,8 +187,8 @@ class _HCDFSegmentationStrategy(SegmentationStrategy):
         _segments, _peaks = get_segments(chroma)
         _med_segments = list()
         for vectors in _segments:
-            vector = librosa.util.sync(vectors, [0], aggregate=numpy.median)
-            _med_segments.append(vector.flatten())
+            vector = numpy.median(vectors, axis=1)
+            _med_segments.append(vector)
         return numpy.array(_med_segments).T, librosa.frames_to_time(_peaks, sr=self._sr, hop_length=self._hop_length)
 
 
@@ -320,7 +311,8 @@ def DefaultChromaStrategyFactory(config: dict) -> ChromaStrategy:
     return _DefaultChromaStrategy(
         config["HOP_LENGTH"],
         config["MIN_FREQ"],
-        config["BINS_PER_OCTAVE"]
+        config["BINS_PER_OCTAVE"],
+        config["N_OCTAVES"]
     )
 
 
@@ -329,7 +321,8 @@ def SmoothingChromaStrategyFactory(config: dict) -> ChromaStrategy:
     return _SmoothingChromaStrategy(
         config["HOP_LENGTH"],
         config["MIN_FREQ"],
-        config["BINS_PER_OCTAVE"]
+        config["BINS_PER_OCTAVE"],
+        config["N_OCTAVES"]
     )
 
 
