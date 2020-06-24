@@ -21,7 +21,7 @@ def _format_transcription(iterable: Sequence[Tuple[float, object]]):
     result = '<span><b>start stop chord</b></span>'
     start = 0.0
     for row in iterable:
-        result += '<span>%f %f %s</span><br>' % (start, row[0], row[1])
+        result += '<span>%.2f %.2f %s</span><br>' % (start, row[0], row[1])
         start = row[0]
     return result
 
@@ -31,7 +31,7 @@ def _save_transcription(directory: str, filename: str, iterable: Sequence[Tuple[
     result = ''
     start = 0.0
     for row in iterable:
-        result += '%f %f %s\n' % (start, row[0], row[1])
+        result += '%.2f %.2f %s\n' % (start, row[0], row[1])
         start = row[0]
 
     filepath = os.path.join(directory, filename)

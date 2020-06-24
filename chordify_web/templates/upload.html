@@ -1,17 +1,29 @@
 {% extends 'base.html' %}
 
-{% block title %}Chordify - Upload file{% endblock %}
+{% block title %}Chord Analysis{% endblock %}
 {% block content %}
+    <a href="https://github.com/MatusSkerlik/ChordTranscriptionWebApp.git"><img
+            style="position: absolute; right: 0; top: 0;"
+            src="{{ url_for('static', filename='github.svg') }}"></a>
+
+    <h1>Chord analysis</h1>
+    <p>To get a <b>sequence of chords</b> from a song, you need to send a file for analysis by <b>pressing the upload
+        button</b>.
+        The classification success of this solution is 75% and is used to help anyone in song analysis.</p>
     <div id="loading"></div>
     <div class="upload">
-        <h1>Transcript <a id="click">file</a></h1>
+        <h2><a id="click">Upload</a></h2>
         <form id="form" action="{{ url_for('upload.index') }}" method="POST" hidden>
             <input id="file" name="file" type="file" accept=".wav">
         </form>
     </div>
+    <p>We do not recommend perceiving succession as an absolute truth.</p>
 {% endblock %}
 
-{% block footer %} <h3>Bang ... </h3>{% endblock %}
+{% block footer %}
+    <p>This project was created within the bachelor's thesis.</p>
+    <p>&#169; Matúš Škerlík</p>
+{% endblock %}
 {% block scripts %}
     <script src="{{ url_for('static', filename='upload.js') }}"></script>
 {% endblock %}

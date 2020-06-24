@@ -18,6 +18,8 @@
 }
 
 html, body {
+    margin: 0;
+    padding: 0;
     height: 100%;
     font-family: 'traveling__typewriterregular', Arial, sans-serif;
 }
@@ -48,16 +50,23 @@ section {
 
 .content {
     text-align: center;
-
     margin: 0 auto;
-
-    width: 70%;
+    width: 600px;
     height: 100%;
+
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    flex-direction: column;
+}
+
+@media (max-width: 800px) {
+    .content {
+        width: 80%;
+    }
 }
 
 .upload {
-    height: 100%;
-
     display: flex;
     justify-content: center;
     align-items: center;
